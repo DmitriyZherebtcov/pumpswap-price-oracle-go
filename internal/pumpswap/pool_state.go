@@ -42,7 +42,14 @@ const (
 	poolQuoteTokenOffset = poolBaseTokenOffset + 32                                             // 171
 )
 
+var solMintPK solana.PublicKey
+
+func init() {
+	solMintPK, _ = solana.PublicKeyFromBase58(SolMintAddress)
+}
+
 // GetPumpSwapPoolState загружает состояние пула: парсит account data, читает резервы из vault token accounts.
+// Валидирует: пул — строго token/SOL (один из mint = SOL), SOL_reserve >= 1 SOL.
 func GetPumpSwapPoolState(ctx context.Context, client *rpc.Client, pool solana.PublicKey) (*PumpSwapPoolState, error) {
 	resp, err := client.GetAccountInfoWithOpts(ctx, pool, &rpc.GetAccountInfoOpts{
 		Encoding:   solana.EncodingBase64,
@@ -56,21 +63,47 @@ func GetPumpSwapPoolState(ctx context.Context, client *rpc.Client, pool solana.P
 	}
 	data := resp.Value.Data.GetBinary()
 	if len(data) < poolQuoteTokenOffset+32 {
-		return nil, fmt.Errorf("invalid pool account size")
+		return nil, fmt.Errorf("%w", ErrInvalidLayout)
 	}
 
-	tokenMint := solana.PublicKeyFromBytes(data[poolBaseMintOffset : poolBaseMintOffset+32])
-	solMint := solana.PublicKeyFromBytes(data[poolQuoteMintOffset : poolQuoteMintOffset+32])
-	tokenVault := solana.PublicKeyFromBytes(data[poolBaseTokenOffset : poolBaseTokenOffset+32])
-	solVault := solana.PublicKeyFromBytes(data[poolQuoteTokenOffset : poolQuoteTokenOffset+32])
+	baseMint := solana.PublicKeyFromBytes(data[poolBaseMintOffset : poolBaseMintOffset+32])
+	quoteMint := solana.PublicKeyFromBytes(data[poolQuoteMintOffset : poolQuoteMintOffset+32])
+	baseVault := solana.PublicKeyFromBytes(data[poolBaseTokenOffset : poolBaseTokenOffset+32])
+	quoteVault := solana.PublicKeyFromBytes(data[poolQuoteTokenOffset : poolQuoteTokenOffset+32])
 
-	tokenReserve, err := getTokenAccountBalance(ctx, client, tokenVault)
-	if err != nil {
-		return nil, fmt.Errorf("token vault balance: %w", err)
+	// Жёсткая валидация: пул должен быть token/SOL (один из mint — SOL).
+	if !baseMint.Equals(solMintPK) && !quoteMint.Equals(solMintPK) {
+		return nil, ErrNotSolPair
 	}
-	solReserve, err := getTokenAccountBalance(ctx, client, solVault)
+
+	baseBal, err := getTokenAccountBalance(ctx, client, baseVault)
 	if err != nil {
-		return nil, fmt.Errorf("sol vault balance: %w", err)
+		return nil, fmt.Errorf("base vault balance: %w", err)
+	}
+	quoteBal, err := getTokenAccountBalance(ctx, client, quoteVault)
+	if err != nil {
+		return nil, fmt.Errorf("quote vault balance: %w", err)
+	}
+
+	// Назначаем Token/Sol по mint: какой vault SOL — тот SolReserve.
+	var tokenMint, solMint solana.PublicKey
+	var tokenVault, solVault solana.PublicKey
+	var tokenReserve, solReserve uint64
+	var tokenDecimals, solDecimals uint8
+
+	if baseMint.Equals(solMintPK) {
+		solMint, solVault, solReserve, solDecimals = baseMint, baseVault, baseBal.Amount, baseBal.Decimals
+		tokenMint, tokenVault, tokenReserve, tokenDecimals = quoteMint, quoteVault, quoteBal.Amount, quoteBal.Decimals
+	} else {
+		tokenMint, tokenVault, tokenReserve, tokenDecimals = baseMint, baseVault, baseBal.Amount, baseBal.Decimals
+		solMint, solVault, solReserve, solDecimals = quoteMint, quoteVault, quoteBal.Amount, quoteBal.Decimals
+	}
+
+	if solReserve < MinSolReserveLiquidity {
+		return nil, ErrSolReserveLow
+	}
+	if tokenReserve == 0 {
+		return nil, ErrZeroLiquidity
 	}
 
 	slot := uint64(0)
@@ -84,10 +117,10 @@ func GetPumpSwapPoolState(ctx context.Context, client *rpc.Client, pool solana.P
 		SolMint:        solMint,
 		TokenVault:     tokenVault,
 		SolVault:       solVault,
-		TokenReserve:   tokenReserve.Amount,
-		SolReserve:     solReserve.Amount,
-		TokenDecimals:  tokenReserve.Decimals,
-		SolDecimals:    solReserve.Decimals,
+		TokenReserve:   tokenReserve,
+		SolReserve:     solReserve,
+		TokenDecimals:  tokenDecimals,
+		SolDecimals:    solDecimals,
 		Slot:           slot,
 	}, nil
 }

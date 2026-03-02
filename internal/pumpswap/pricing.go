@@ -16,10 +16,10 @@ func PriceInSOL(state *PumpSwapPoolState) (float64, error) {
 		return 0, fmt.Errorf("pool state is nil")
 	}
 	if state.TokenReserve < MinReserveForPrice {
-		return 0, fmt.Errorf("token reserve too small: %d", state.TokenReserve)
+		return 0, fmt.Errorf("%w (token %d)", ErrZeroLiquidity, state.TokenReserve)
 	}
 	if state.SolReserve < MinReserveForPrice {
-		return 0, fmt.Errorf("sol reserve too small: %d", state.SolReserve)
+		return 0, fmt.Errorf("%w (sol %d)", ErrSolReserveLow, state.SolReserve)
 	}
 
 	solDiv := math.Pow(10, float64(state.SolDecimals))
@@ -28,10 +28,10 @@ func PriceInSOL(state *PumpSwapPoolState) (float64, error) {
 
 	// Sanity: цена не должна быть отрицательной, нулевой, NaN или астрономической
 	if price <= 0 || math.IsInf(price, 0) || math.IsNaN(price) {
-		return 0, fmt.Errorf("invalid price: %f", price)
+		return 0, fmt.Errorf("%w: %f", ErrInvalidPrice, price)
 	}
 	if price > 1e15 || price < 1e-15 {
-		return 0, fmt.Errorf("price out of sanity bounds: %f", price)
+		return 0, fmt.Errorf("%w: %f", ErrInvalidPrice, price)
 	}
 	return price, nil
 }
