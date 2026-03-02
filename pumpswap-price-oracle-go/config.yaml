@@ -1,0 +1,19 @@
+rpc:
+  endpoints:
+    - https://solana-rpc.publicnode.com
+    - https://solana.drpc.org
+    - https://solana.api.onfinality.io/public
+
+ws:
+  endpoints:
+    - wss://solana-rpc.publicnode.com
+    - wss://solana.drpc.org
+    - wss://solana.api.onfinality.io/public
+
+pumpswap:
+  mints:
+    - "PUT_MINT_ADDRESS_HERE"
+
+stream:
+  commitment: processed
+  reconnect_delay_ms: 2000
