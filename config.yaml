@@ -10,9 +10,10 @@ ws:
     - wss://solana.drpc.org
     - wss://solana.api.onfinality.io/public
 
+# https://swap.pump.fun/ — адреса контрактов токенов (mint)
 pumpswap:
   mints:
-    - "PUT_MINT_ADDRESS_HERE"
+    - "9FPRvikGKGR9VSV4g5Luw91iDtZEPihuNtKFQcnupump"
 
 stream:
   commitment: processed

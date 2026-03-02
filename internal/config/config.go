@@ -15,8 +15,7 @@ type Config struct {
 	} `yaml:"ws"`
 
 	PumpSwap struct {
-		Mints         []string `yaml:"mints"`
-		BondingCurves []string `yaml:"bonding_curves"`
+		Mints []string `yaml:"mints"` // mint → PDA bonding_curve считается в коде
 	} `yaml:"pumpswap"`
 
 	Stream struct {
