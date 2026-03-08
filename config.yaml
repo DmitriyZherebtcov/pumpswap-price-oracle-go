@@ -11,9 +11,12 @@ ws:
     - wss://solana.api.onfinality.io/public
 
 # https://swap.pump.fun/ — адреса контрактов токенов (mint)
+# pools: жёстко указать пул для пары SOL/токен (mint -> pool address); если задано — scan не выполняется
 pumpswap:
   mints:
     - "9FPRvikGKGR9VSV4g5Luw91iDtZEPihuNtKFQcnupump"
+  pools:
+    9FPRvikGKGR9VSV4g5Luw91iDtZEPihuNtKFQcnupump: ""  # подставить адрес пула с swap.pump.fun (оставить "" для auto-scan)
 
 stream:
   commitment: processed

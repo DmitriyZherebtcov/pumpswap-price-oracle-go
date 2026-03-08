@@ -45,12 +45,24 @@ type pumpswapOracle struct {
 }
 
 // NewPumpSwapOracle создаёт оракул, использующий только PumpSwap DEX (без bonding curve).
-func NewPumpSwapOracle(client *rpc.Client) PriceOracle {
-	return &pumpswapOracle{
+// fixedPools: опционально mint -> pool address; если задан — scan не выполняется для этого mint.
+func NewPumpSwapOracle(client *rpc.Client, fixedPools map[string]solana.PublicKey) PriceOracle {
+	orc := &pumpswapOracle{
 		client:    client,
 		poolCache: make(map[string]cachedPool),
 		cooldown:  30 * time.Second,
 	}
+	if len(fixedPools) > 0 {
+		now := time.Now()
+		// Фиксированные пулы кладём в кэш с длинным TTL (1 год), чтобы не сканировать.
+		expiry := now.Add(365 * 24 * time.Hour)
+		for mint, pool := range fixedPools {
+			if !pool.IsZero() {
+				orc.poolCache[mint] = cachedPool{Address: pool, Expiry: expiry}
+			}
+		}
+	}
+	return orc
 }
 
 // isLogicalError — ошибки, по которым circuit breaker НЕ срабатывает.

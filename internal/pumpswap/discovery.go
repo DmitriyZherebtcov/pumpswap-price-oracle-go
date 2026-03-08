@@ -11,6 +11,9 @@ import (
 // MinSolReserveLiquidity — минимум 1 SOL в резервах пула (anti-dust). Raw units для 9 decimals = 1e9.
 const MinSolReserveLiquidity = 1_000_000_000
 
+// MinSolReserveFallback — если пула с >= 1 SOL нет, допускаем >= 0.1 SOL (raw 1e8).
+const MinSolReserveFallback = 100_000_000
+
 var solMintPubkey solana.PublicKey
 
 func init() {
@@ -57,14 +60,13 @@ func FindPumpSwapSolPoolByScan(ctx context.Context, client *rpc.Client, tokenMin
 	return solana.PublicKey{}, fmt.Errorf("%w: mint %s", ErrPoolNotFound, tokenMint.String())
 }
 
-// scanPoolsWithFilters: getProgramAccounts с memcmp(base_mint=baseMint, quote_mint=quoteMint), декод, фильтр liquidity >= 1 SOL, макс SOL.
+// scanPoolsWithFilters: один memcmp по base_mint (публичные RPC часто не отдают при двух memcmp), затем в коде проверяем quote_mint и ликвидность.
 func scanPoolsWithFilters(ctx context.Context, client *rpc.Client, programID, baseMint, quoteMint, tokenMint solana.PublicKey) (bestPool solana.PublicKey, bestSolReserve uint64, err error) {
 	opts := &rpc.GetProgramAccountsOpts{
 		Commitment: rpc.CommitmentConfirmed,
 		Encoding:   solana.EncodingBase64,
 		Filters: []rpc.RPCFilter{
 			{Memcmp: &rpc.RPCFilterMemcmp{Offset: poolBaseMintOffset, Bytes: solana.Base58(baseMint.String())}},
-			{Memcmp: &rpc.RPCFilterMemcmp{Offset: poolQuoteMintOffset, Bytes: solana.Base58(quoteMint.String())}},
 		},
 	}
 	accounts, err := client.GetProgramAccountsWithOpts(ctx, programID, opts)
@@ -74,7 +76,12 @@ func scanPoolsWithFilters(ctx context.Context, client *rpc.Client, programID, ba
 
 	for _, acct := range accounts {
 		data := acct.Account.Data.GetBinary()
-		if len(data) < poolQuoteTokenOffset+32 {
+		if len(data) < poolQuoteMintOffset+32 {
+			continue
+		}
+		// Проверяем quote_mint в коде (второй фильтр без второго memcmp)
+		quoteAt := solana.PublicKeyFromBytes(data[poolQuoteMintOffset : poolQuoteMintOffset+32])
+		if !quoteAt.Equals(quoteMint) {
 			continue
 		}
 		poolAddr := acct.Pubkey
@@ -85,7 +92,7 @@ func scanPoolsWithFilters(ctx context.Context, client *rpc.Client, programID, ba
 		if !isValidSolPair(state, tokenMint) {
 			continue
 		}
-		if state.SolReserve < MinSolReserveLiquidity {
+		if state.SolReserve < MinSolReserveFallback {
 			continue
 		}
 		if state.SolReserve > bestSolReserve {
@@ -129,7 +136,7 @@ func scanPoolsFallback(ctx context.Context, client *rpc.Client, programID, token
 		if !isValidSolPair(state, tokenMint) {
 			continue
 		}
-		if state.SolReserve < MinSolReserveLiquidity {
+		if state.SolReserve < MinSolReserveFallback {
 			continue
 		}
 		if state.SolReserve > bestSolReserve {

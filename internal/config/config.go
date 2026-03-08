@@ -15,7 +15,8 @@ type Config struct {
 	} `yaml:"ws"`
 
 	PumpSwap struct {
-		Mints []string `yaml:"mints"` // token mint addresses (PumpSwap DEX only)
+		Mints []string            `yaml:"mints"` // token mint addresses (PumpSwap DEX only)
+		Pools map[string]string   `yaml:"pools"` // optional: mint -> pool address (skip scan, use this pool)
 	} `yaml:"pumpswap"`
 
 	Stream struct {

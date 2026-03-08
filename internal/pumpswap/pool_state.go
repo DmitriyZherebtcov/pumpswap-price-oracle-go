@@ -99,7 +99,8 @@ func GetPumpSwapPoolState(ctx context.Context, client *rpc.Client, pool solana.P
 		solMint, solVault, solReserve, solDecimals = quoteMint, quoteVault, quoteBal.Amount, quoteBal.Decimals
 	}
 
-	if solReserve < MinSolReserveLiquidity {
+	// Минимум 0.1 SOL в пуле (1 SOL желательно, но для малых пулов допускаем 0.1)
+	if solReserve < MinSolReserveFallback {
 		return nil, ErrSolReserveLow
 	}
 	if tokenReserve == 0 {

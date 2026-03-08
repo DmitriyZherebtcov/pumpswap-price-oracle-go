@@ -48,9 +48,24 @@ func main() {
 		log.Fatal("no valid mints")
 	}
 
+	// Опционально: жёстко указанные пулы (mint -> pool) из config; при наличии scan не выполняется.
+	fixedPools := make(map[string]solanago.PublicKey)
+	for mintStr, poolStr := range cfg.PumpSwap.Pools {
+		if poolStr == "" {
+			continue
+		}
+		pool, err := solanago.PublicKeyFromBase58(poolStr)
+		if err != nil {
+			log.Printf("skip invalid pool for mint %q: %v", mintStr, err)
+			continue
+		}
+		fixedPools[mintStr] = pool
+		log.Printf("fixed pool for %s: %s", mintStr, poolStr)
+	}
+
 	client := solana.NewRPCClient(cfg.RPC.Endpoints[0])
 	rpcIndex := 0
-	orc := oracle.NewPumpSwapOracle(client)
+	orc := oracle.NewPumpSwapOracle(client, fixedPools)
 	retry := oracle.DefaultRetryConfig()
 
 	log.Printf("PumpSwap DEX Oracle started. Watching %d token(s), RPC: %s", len(mints), cfg.RPC.Endpoints[0])
@@ -79,7 +94,7 @@ func main() {
 				if rpcIndex+1 < len(cfg.RPC.Endpoints) {
 					rpcIndex++
 					client = solana.NewRPCClient(cfg.RPC.Endpoints[rpcIndex])
-					orc = oracle.NewPumpSwapOracle(client)
+					orc = oracle.NewPumpSwapOracle(client, fixedPools)
 					log.Printf("RPC fallback: %s", cfg.RPC.Endpoints[rpcIndex])
 				}
 				continue
